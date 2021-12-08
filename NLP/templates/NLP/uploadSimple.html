@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Django NLP Data Upload</title>   
+    </head>
+    <body>
+
+        <!-- Upload form. Note enctype attribute! -->
+	<form method="post" enctype="multipart/form-data">
+		{% csrf_token %}
+		<p> 
+			<label>Select NLP File</label>
+			<input type="file" name="NLPfile">
+		</p>	
+
+		<p>
+			<label>Reference ID</label>
+			<input type="text" name="IDtext">
+		</p>
+
+		<label>Create </label>
+
+		<button type="submit">Process</button>
+	</form>
+	
+    </body>
+</html>
