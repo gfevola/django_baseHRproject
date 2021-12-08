@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hospital Map</title>
+  <style type="text/css">
+    html,body{margin:0px;height:100%;width:100%}
+	
+    .container{width:900px;height:600px}
+	
+	.row1 {
+		float: left;
+		height: 50px;
+		width: 100%;
+	}
+	
+	.row2{
+		float: left;
+		width: 100%;
+	}
+	
+	.columnA {
+		float: left;
+		padding: 15px;
+	}
+	
+	 .columnB {
+		float: left;
+		width: 28%;
+		padding: 15px;
+	}
+	
+  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.css">
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.min.js"></script>
+  <script src="https://d3js.org/d3.v4.min.js"></script> 
+  
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+
+	 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css"></link>
+	<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.js"></script>
+
+ <body>
+ 
+	<div class="wrapper">
+		
+			<div class="row1">
+				<div id="dropdown1" class="dropdown-content">Select Location: </div>
+			</div>
+	
+		
+			<div class="row2">
+				<div class="columnA">
+					<div id="map" class="container"></div>
+				</div>
+				<div class="columnB">
+					<table id="table2" class="cell-border stripe-hover"></table>
+				</div>
+			</div>		
+			
+		</div>
+	</div>
+ <script>
+	
+	geodata = JSON.parse('{{ locs|safe }}');
+	demodata = JSON.parse('{{ data|safe }}');
+
+	var datafilt
+	var datatbl
+	var points
+	
+	console.log(demodata);
+	
+	//dropdown object
+	const dropdownMenu = (selection,props,field) => {
+		const { options } = props;
+	
+		let select = selection.selectAll('select').data([null]);
+		select = select.enter().append('select').merge(select)
+				.attr('id','dropdown'+ field);
+		
+		const option = select.selectAll('option').data(options);
+			option.enter().append('option').merge(option)
+				.attr('value',d=> d)
+				.text(d => d);
+	};
+	//Populate
+	dropdownMenu(d3.select('#dropdown1'), {options: uniqueItems(demodata,"BU_SL")}, "BU_SL");
+	
+	
+     //map object
+	  var map = new maptalks.Map('map', {
+        center: [-73.6,40.8],
+        zoom: 10,
+        pitch : 10,
+        attribution: true,
+        zoomControl : true, // add zoom control
+        scaleControl : true, // add scale control
+        overviewControl : true, // add overview control
+        baseLayer: new maptalks.TileLayer('base', {
+          urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          subdomains: ['a','b','c','d'],
+          attribution: '&copy; <a href="http://osm.org">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/">CARTO</a>'
+        })
+      });
+
+	//Create datapoints
+	hospitals = [];
+	geodata.forEach(function(x){ 
+		if (x['LocationName'] != "nan"){
+			hospitals.push(makePoint([x.Longitude,x.Latitude],x['LocationName'],500,'#F449ab',2));
+		}
+		});
+	
+//convert data to points	
+function updateDataFilt(filteredData){	
+	points = [];
+	
+	map.removeLayer('vector2')
+	
+	filteredData.forEach(function(x){ 
+		if (x['LocationName'] != null){
+			points.push(makePoint([x.Longitude,x.Latitude],x['Emplid'],200,'#34495e',1))
+		}
+		});
+		
+	new maptalks.VectorLayer('vector2',points).addTo(map);
+		
+	return(points);	
+}
+
+	//point function//
+	function makePoint(coords,name,radius,fillcolor,width){
+		var p = new maptalks.Circle(coords,radius,{
+					symbol: {
+					lineColor: '#34495e',
+					lineWidth: width,
+					polygonFill: fillcolor,
+					polygonOpacity: .4,
+					}
+				})
+				.on("mouseover", function(e){
+					e.target.updateSymbol({
+						'polygonFill': '#A42d12',
+						'textName': name,
+						'textVerticalAlignment': 'top'
+					});
+				})
+				.on("mouseout",function(e){
+					e.target.updateSymbol({
+						'polygonFill': '#34495e',
+						'textName': null,
+						
+					});				
+				});
+		return(p);		
+	}
+
+	new maptalks.VectorLayer('vector1',
+		hospitals,
+		)
+		.addTo(map);
+		
+//----------------------------	
+	//not using
+	function tableCreate(datatbl){
+	//create table Info
+
+		var tbl = d3.select("#table1").append("table");
+		var tblbody = tbl.append("tbody");
+		
+		//column names are hard-coded
+		var tblhead = tbl.append("thead").append("tr")
+						.selectAll("th")
+						.data([1,2,3]).enter()
+						.append('th')
+						.text(function(d) { return d; })
+
+		var tblhead = tbl.selectAll("tr")
+						.data(datatbl).enter()
+						.append('tr')
+						.text(function(d) {return d; })
+						
+						
+	}
+//-------------------------------
+
+
+//js datatable
+function tableCreate2(datatbl){
+	$(document).ready(function(){
+		table2 = $('#table2').DataTable({
+			data: datatbl,
+			columns: [{title: "ID"}, {title: "Name"},{title: "Department"}]
+		});
+		
+		table2.on('click','tr',function(){
+			console.log(table2.row(this).data());
+		
+		});
+		
+	});
+	
+}
+
+//create unique list
+	function uniqueItems(data,field){
+		ui = Array.from(new Set(
+				data.map(a => a[field])
+			));
+		 if (field == "ReportDate") { return ui; 
+		 } else {
+		return ["Select " + field].concat(ui).sort();
+		}
+	};
+
+//Demographic Filter
+function filterJSON(jdata, col, colval, asTable){
+	var result = [];
+		jdata.forEach(function(val,id,arr) {
+				if (val[col] == colval){
+						result.push(val);
+				}
+		});
+		
+		if (asTable) {
+		temp=[]	;
+			result.forEach(function(d,i){
+				temp.push([d.Emplid, d.EmployeeName, d.DepartmentName,]);
+			});
+		result = temp;	
+		}
+
+	return result.sort();
+};
+
+
+tableCreate2(datatbl);
+
+//dropdown function
+d3.select("#dropdown1").on("change", function() {
+	var dd1 = document.getElementById("dropdownBU_SL");
+	dropdownSelected = dd1.options[dd1.selectedIndex].text;
+	
+	datafilt = filterJSON(demodata,"BU_SL",dropdownSelected,false);
+	datatbl = filterJSON(demodata,"BU_SL",dropdownSelected,true);
+	points = updateDataFilt(datafilt);
+
+	//update table2
+	$('#table2').DataTable().clear().rows.add(datatbl).draw();
+});
+
+
+
+    </script>
+  </body>
+</html>

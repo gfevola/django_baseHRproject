@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hospital Map</title>
+  <style type="text/css">
+    html,body{margin:0px;height:100%;width:100%}
+	
+    .container{width:900px;height:600px}
+	
+	.row0, row1, row2 {
+		float: left;
+		height: 30px;
+		width: 100%;
+	}
+	
+	.row3 {
+		float: left;
+		width: 100%;
+	}
+	
+	.columnA {
+		float: left;
+		padding: 15px;
+	}
+	
+	 .columnB {
+		float: left;
+		width: 28%;
+		padding: 15px;
+	}
+	
+  </style>
+
+<!--Leaflet-->
+ <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+   integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+   crossorigin=""/>
+
+ <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+   integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+   crossorigin=""></script>
+
+  <script src="https://d3js.org/d3.v4.min.js"></script> 
+  
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css"></link>
+  <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.js"></script>
+
+ <body>
+ 
+	<div class="wrapper">
+			<div class="row0">Filters</div>
+			<div class="row1">
+				<div id="dropdown1" class="dropdown-content"></div>
+			</div>
+			<div class="row2">
+				<div id="dropdown2" class="dropdown-content"></div>
+			</div>
+	
+		
+			<div class="row3">
+				<div class="columnA">
+					<div id="map" class="container"></div>
+				</div>
+				<div class="columnB">
+					<table id="table2" class="cell-border stripe-hover"></table>
+				</div>
+			</div>		
+			
+		</div>
+	</div>
+ <script>
+	var geodata
+	var demodata
+	var datafilt
+	var datatbl
+	var points
+	var revpoint
+	
+	geodata = JSON.parse('{{ locs|safe }}');
+	demodata = JSON.parse('{{ data|safe }}');
+	datafilt = demodata;
+	
+	console.log(demodata[1]);
+	
+	//dropdown object
+	const dropdownMenu = (selection,props,field) => {
+		const { options } = props;
+	
+		let select = selection.selectAll('select').data([null]);
+		select = select.enter().append('select').merge(select)
+				.attr('id','dropdown'+ field);
+		
+		const option = select.selectAll('option').data(options);
+			option.enter().append('option').merge(option)
+				.attr('value',d=> d)
+				.text(d => d);
+	};
+	//Populate
+	dropdownMenu(d3.select('#dropdown1'), {options: uniqueItems(demodata,"BU_SL")}, "BU_SL");
+	dropdownMenu(d3.select('#dropdown2'), {options: uniqueItems(demodata,"JobFunctionFamily")}, "JobFunctionFamily");
+
+     //map object
+	  var map = new L.Map('map',{center:[40.8,-73.6], zoom:10});
+
+        L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+	//Hospital datapoints - initialization
+	var HospitalGroup = L.featureGroup().addTo(map);
+	geodata.forEach(function(x){ 
+		if (x['LocationName'] != "nan"){
+			var px = makePoint([x.Latitude,x.Longitude],x['LocationName'],500,'#F449ab',2);
+			px.addTo(HospitalGroup);
+		}
+		});
+	var LayerGroup = L.featureGroup().addTo(map);
+	
+//convert data to points	
+function updateLayerGroup(filteredData){	
+
+	LayerGroup.remove();
+	LayerGroup = L.featureGroup().addTo(map);
+
+	filteredData.forEach(function(x){ 
+		if (x['LocationName'] != null){
+				var px = makePoint([x.Latitude,x.Longitude],x['Emplid'],200,'#acf2d3',1);
+				px.addTo(LayerGroup);
+		}
+		});
+	a = 0;
+	LayerGroup.eachLayer(function(layer){
+		a = a + 1;
+		layer.layerID = filteredData[a]['Emplid'];
+	});
+}
+
+function updateLayerPoint(elementID,highlight){
+//replace node with highlighted node
+		if (highlight==true){
+			idval = elementID
+		} else {
+			idval = "hover"
+		}
+	
+	LayerGroup.eachLayer(function(layer){
+		if (layer.layerID == idval){
+			//save params
+			xval = layer._latlng.lat;
+			yval = layer._latlng.lng;
+			name = layer._tooltip._content;
+			LayerGroup.removeLayer(layer);
+			if (highlight==true){
+				revpoint = makePoint([xval,yval],name,900,'#ffd700',1);
+				revpoint.layerID = "hover";
+				console.log(revpoint);
+			} else {
+				revpoint = makePoint([xval,yval],name,200,'#acf2d3',1);
+				revpoint.layerID=elementID;
+				console.log(revpoint);
+			}
+		}
+	})
+	revpoint.addTo(LayerGroup);
+}
+
+
+	//point function//
+	function makePoint(coords,name,radius,fillcolor,width){
+		
+		var p = new L.Circle(coords,radius,{
+					'color': "#FFFFFF",
+					'weight': 1,
+					'fillColor': fillcolor,
+				})
+				.bindTooltip(name)
+				.on("mouseover", function(e){
+					this.setStyle({
+						'fillColor': '#40e0d0',
+					});
+				})
+				.on("mouseout",function(e){
+					this.setStyle({
+						'fillColor': fillcolor,
+					});				
+				});
+
+		return(p);	
+
+	}
+
+//js datatable
+function tableCreate2(datatbl){
+	$(document).ready(function(){
+		table2 = $('#table2').DataTable({
+			data: datatbl,
+			columns: [{title: "ID"}, {title: "Name"},{title: "Department"}]
+		});
+		
+		table2.on('click','tr',function(){
+			updateLayerPoint(table2.row(this).data()[0],true)
+		})
+		.on('dblclick','tr',function(){
+			updateLayerPoint(table2.row(this).data()[0],false)
+		});
+		
+	});
+	
+}
+
+//create unique list
+	function uniqueItems(data,field){
+		ui = Array.from(new Set(
+				data.map(a => a[field])
+			));
+		ui = ui.sort();	
+		return ["Select " + field].concat(ui);
+	};
+
+//Demographic Filter
+function filterJSON(jdata, col, colval, asTable){
+	var result = [];
+		jdata.forEach(function(val,id,arr) {
+				if (val[col] == colval){
+						result.push(val);
+				}
+		});
+		
+		if (asTable) {
+		temp=[]	;
+			result.forEach(function(d,i){
+				temp.push([d.Emplid, d.EmployeeName, d.DepartmentName,]);
+			});
+		result = temp;	
+		}
+
+	return result.sort();
+};
+
+
+tableCreate2(datatbl);
+
+
+d3.select("#dropdown1").on("change", function() {
+	dropdownchange("BU_SL",1)
+	
+	$("#dropdown2").empty();	
+	dropdownMenu(d3.select('#dropdown2'), {options: uniqueItems(datafilt,"JobFunctionFamily")}, "JobFunctionFamily");
+});
+d3.select("#dropdown2").on("change", function() {
+	dropdownchange("JobFunctionFamily",2)
+});
+
+
+//dropdown function
+function dropdownchange(field,level){
+	var dd1 = document.getElementById("dropdown"+field);
+	dropdownSelected = dd1.options[dd1.selectedIndex].text;
+	if (level==1){
+		datafilt_BU = filterJSON(demodata,field,dropdownSelected,false);
+		datafilt = datafilt_BU;
+	} else {
+		datafilt = filterJSON(datafilt_BU,field,dropdownSelected,false);	
+	}
+	datatbl = filterJSON(datafilt,field,dropdownSelected,true);
+	points = updateLayerGroup(datafilt);
+
+	//update table2
+	$('#table2').DataTable().clear().rows.add(datatbl).draw();
+}
+
+
+    </script>
+  </body>
+</html>

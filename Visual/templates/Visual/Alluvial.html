@@ -1,0 +1,128 @@
+{% extends "Visual/base.html" %}
+
+{%block content %}
+
+<!DOCTYPE html>
+<meta charset="UTF-8">
+
+<style>
+	#buffer {padding: 30px}
+	
+	.row {
+	display: table;
+	table-layout: fixed;
+	}
+
+	.column {
+		display: table-cell;
+		border-spacing: 50px;
+	}
+
+	
+	input {background: yellow;
+		padding: 10px;
+		display: inline-block;}
+	
+	.node { 
+		stroke: #fff;
+		stroke-width: 2px;
+	}
+	
+
+	th, td {
+		border: .5px solid black;
+		font-size: 12px;
+	}
+
+</style>
+2
+<body>
+<div id="buffer"></div>
+
+
+<div class="row">
+	<div class="column"> <div id="alluvial1"></div> </div>
+
+</div>
+
+<!-- load the d3.js library -->	
+	<script src="https://d3js.org/d3.v4.min.js"></script> 
+<!--<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script> -->
+
+<script src="https://unpkg.com/d3-sankey@0"></script>
+<script src="https://unpkg.com/d3-path@1"></script>
+
+<script type="text/javascript">
+
+	//data model import
+
+	var data = JSON.parse('{{ data|safe }}');
+	
+	var mp2 = data.map(a => a.fields);
+	//console.log(mp2);
+	//mp2.sort(d3.ascending);
+
+	var margin = {top:10, bottom:10, left:10, right:10},
+	width = 500,
+	height = 600;
+
+	
+	var graph = {"nodes":[], "links":[]};
+	
+	mp2.forEach(function(d){
+		graph.nodes.push({"name": d.Sender});
+		graph.nodes.push({"name": d.Recipient});
+		graph.links.push({"source": d.Sender, 
+						  "target": d.Recipient,
+						  "value": d.N });
+	})
+
+	graph.nodes = d3.keys(
+		d3.nest()
+			.key(function(d){ return d.name; })
+			.object(graph.nodes)
+		);
+	
+	
+	graph.links.forEach(function(d,i){
+		graph.links[i].source = graph.nodes.indexOf(graph.links[i].source);
+		graph.links[i].target = graph.nodes.indexOf(graph.links[i].target);
+	});
+	
+	//convert to object set
+	graph.nodes = Object.assign({},graph.nodes);
+
+
+	console.log(graph.links);
+	console.log(graph.nodes);
+
+	////////////
+	var svg = d3.select("#alluvial1").append("svg")
+				.attr("width", width + margin.left + margin.right)
+				.attr("height", height + margin.top + margin.bottom)
+			  .append("g")
+				 .attr("transform","translate(" + margin.left + "," + margin.top + ")");
+	
+
+	//sankey (Alluvial) diagram
+	  const sankey = d3.sankey()
+		  .nodeId(d => d.name)
+		  //.nodeAlign(d3[`sankey${align[0].toUpperCase()}${align.slice(1)}`])
+		  .nodeWidth(15)
+		  .nodePadding(10)
+		  .extent([[1, 5], [width - 1, height - 5]]);
+	  
+	  ({nodes, links}) => sankey({
+		nodes: nodes.map(d => Object.assign({}, d)),
+		links: links.map(d => Object.assign({}, d))
+	  });
+
+		const {nodes, links} = sankey(graph);
+
+</script>
+
+
+
+</body>
+
+{% endblock %}

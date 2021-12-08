@@ -1,0 +1,420 @@
+{% extends "Visual/base.html" %}
+
+{%block content %}
+
+<!DOCTYPE html>
+<meta charset="UTF-8">
+
+<style>
+	#buffer {padding: 30px}
+	
+	.row {
+	display: table;
+	table-layout: fixed;
+	}
+
+	.column {
+		display: table-cell;
+		border-spacing: 50px;
+	}
+
+	
+	input {background: yellow;
+		padding: 10px;
+		display: inline-block;}
+	
+	.node { 
+		stroke: #fff;
+		stroke-width: 2px;
+	}
+	
+
+	th, td {
+		border: .5px solid black;
+		font-size: 12px;
+	}
+
+</style>
+2
+<body>
+<div id="buffer"></div>
+
+    <form name="myform" method="get" onsubmit="refreshNetwork()">
+            <input name="Submit"  input type="submit" value="Minimum Connection" >
+            <input type="integer" id="filter1" placeholder="20" name="filter2">
+    </form>
+	
+
+	<div id="dropdown1"> </div>	
+
+
+<div class="row">
+	<div class="column"> <div id="legend1"></div> </div>
+	<div class="column"> <div id="network1"></div> </div>	
+	<div class="column"> <div id="table1"></div> </div>	
+</div>
+
+<div class="row">
+	<div class="column"> <div id="alluvial1"></div> </div>
+
+</div>
+
+<!-- load the d3.js library -->	
+<!-- <script src="https://d3js.org/d3.v4.min.js"></script> -->
+	<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+
+	
+<script type="text/javascript">
+
+	//data model import
+	var data = JSON.parse('{{ data|safe }}');
+	
+	var mp2 = data.map(a => a.fields);
+	//console.log(mp2);
+	//mp2.sort(d3.ascending);
+	
+	width = 500;
+	height = 600;
+	
+	var fill = d3.scale.category10();
+	//var color1 = d3.scale.linear().domain(d3.extent(mp2,function(d) { return d["N"]; })).range([0,1]);
+	var color1 = d3.scale.linear().domain([0,10]).range(["green","blue","purple","red"]);
+	if (document.getElementById("filter1").value!=""){
+		var filterNum = document.getElementById("filter1").value;
+	} else {
+		var filterNum = 40;
+	}
+	
+
+///////////dropdown/////////////
+var dropdown = d3.select("#dropdown1")
+					.insert("select","svg")
+					.attr("width",100)
+					.attr("height",200)
+					.attr("id","dropdownRegion")
+					.on("change",function(d){ dropdownChange(d); });
+					
+
+	
+
+/////////functions//////////////////
+
+function createNetwork(data,thresh){
+	//console.log(thresh + " - 0");
+	d3.select("network1").remove()
+	
+	var nodes = {};
+	
+	mp2.forEach(function(x){
+		x.source = x.Sender;
+		x.target = x.Recipient;
+	})
+
+	
+	mp2.forEach(function(link){
+		link.source = nodes[link.Sender] ||
+			(nodes[link.Sender] = {name: link.Sender}); //avoid duplication
+		link.target = nodes[link.Recipient] ||
+			(nodes[link.Recipient] = {name: link.Recipient}); //avoid duplication
+		link.weight = link.N;
+	})
+	
+	
+	var dataFilt = filterData(data,thresh,false);	
+	var dataTab = filterData(nodes,thresh,true);
+
+	///fix dropdown
+	dropdown.selectAll("option")
+			.data(dataTab)
+			.enter().append("option")
+			.attr("id",function(d) { return d[0]; })
+			.attr("value",function(d) {return d[0];})
+			.text(function(d) { return d[0]});
+			
+			
+	dropdown.selectAll("select").on("change",function(d){ console.log(d); dropdownChange(d); });
+
+
+	//add svg
+	var svg = d3.select('#network1').append('svg')
+				.attr('width',width)
+				.attr('height',height)
+				.call(d3.behavior.zoom().scaleExtent([.25,4]).on("zoom",zoom));
+				
+	function zoom() {
+		svg.attr("transform","translate(" + d3.event.translate+ ") scale(" + d3.event.scale + ")");  
+	}
+	
+	var force = d3.layout.force()
+				.size([width,height])
+				.nodes(d3.values(nodes))
+				.links(dataFilt)
+				.on("tick",tick) //render
+				.linkDistance(100)
+				.gravity(1/50)
+				.alpha(.1)
+				.linkStrength(1/10)
+				.charge(-200)
+				.chargeDistance(200)
+				//.theta(1)
+				.start();
+				
+	var link = svg.selectAll('.link')
+			.data(dataFilt)
+			.enter().append('line')
+			.attr('class','link')
+			.attr("id",function(d,i) {return dataFilt[i].Sender + "|" + dataFilt[i].Recipient})
+			.attr("stroke-width",2)
+			.attr("stroke","black")
+			.attr("stroke-opacity",.6); 
+			
+		
+	var node = svg.selectAll('.node')
+			.data(force.nodes())
+			.enter().append('circle')
+			.attr('class','node')
+			.attr("id",function(d,i){ return dataTab[i]})
+			.attr("fill",function(d,i){ return color1(d["weight"]); })
+			.attr('r',7)
+			.on("mouseover", function(d,i){ 
+			
+					d3.select(this).attr("r",15) 
+					//d3.select(this).attr("fill","black") 
+					d3.select('#legend1').selectAll(".legend").selectAll("text")[i][0].attributes.fill.value = "red";
+					d3.select('#legend1').selectAll(".legend").selectAll("text")[i][0].attributes.style.value = "font-size: 21px";	
+					
+					highlightOn(dataFilt,d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.id.value);
+
+					//renderTable(dataFilt); //not using
+	
+					
+			})
+			.on("mouseout", function(d,i){ 
+			
+					d3.select(this).attr("r",7);
+					d3.select(this).attr("fill",color1(d["weight"])); 					
+					d3.select('#legend1').selectAll(".legend").selectAll("text")[i][0].attributes.fill.value = "black";
+					d3.select('#legend1').selectAll(".legend").selectAll("text")[i][0].attributes.style.value= "font-size: 15px";
+
+					highlightOff(dataFilt);
+			})
+			.on("dblclick",function(d,i){
+				//save position data
+				dd = []
+				a = 0
+				d3.selectAll(".node").selectAll("circle").forEach(function(x){
+					
+					//////////////WORKING - PULL COORDINATES//////////////
+					//console.log(x.parentNode.attributes)
+					a = a + 1;
+					dd[a,0] = x.parentNode.attributes.id.value;
+					dd[a,1] = x.parentNode.attributes.cx.value;
+					dd[a,2] = x.parentNode.attributes.cy.value;
+					//a = a + 1;
+					//console.log(dd);
+				});
+				//console.log(dd);
+			});
+			
+			
+	node.append("title").text(function(d) { return d.name });
+		
+	////labels////
+	var legend = d3.select('#legend1').append('svg')
+			.attr('width',300)
+			.attr('height',800)
+			.selectAll(".legend")
+			.data(dataTab)
+			.enter().append("g")
+			.attr("class","legend")
+
+			.attr("transform", function(d,i) {
+					var horiz = -10;
+					var vert = i*15 + 22;
+					return 'translate(' + horiz + "," + vert + ")";
+			});
+
+		legend.append('rect')
+			.attr("width",20)
+			.attr("height",20)
+			.style("fill",fill)
+			.style("stroke",fill);
+
+		legend.append('text')
+			.attr('x',25)
+			.attr('y',15)
+			.attr("fill","black")
+			.style("font-size","15px")
+			.style("font-weight","")
+			.attr("id",function(d,i){return dataTab[i]})
+			.text(function(d) { return d;})
+			.on("mouseover",function(d,i){
+				d3.select(this).attr("fill","red");
+				d3.select(this).style("font-size", "21px");	
+				//d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.fill.value = "black";
+				d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.r.value = 15;
+				
+				//filter highlight/transparency
+				highlightOn(dataFilt,d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.id.value);
+				
+			})
+			.on("mouseout",function(d,i){
+				d3.select(this).attr("fill","black");
+				d3.select(this).style("font-size", "15px");		
+				//d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.fill.value = color1();
+				d3.selectAll('.node').selectAll(".circle")[i].parentNode.attributes.r.value = 7;
+				highlightOff(dataFilt);
+			});
+			
+	/////////////////////	
+		
+	function tick(e){
+		node.attr('cx',function(d){ return d.x })
+			.attr('cy',function(d){ return d.y })
+			.call(force.drag); //allows drag feature
+	
+		//update links position
+		link.attr('x1', function(d) { return d.source.x })
+			.attr('y1', function(d) { return d.source.y })
+			.attr('x2', function(d) { return d.target.x })
+			.attr('y2', function(d) { return d.target.y })
+			
+	}	
+} //Network Function
+
+function refreshNetwork(event){
+	var filterNum1 = document.getElementById("filter1").value;
+	createNetwork(mp2,filterNum1);
+}
+
+//////filter functions/////////
+function filterData(data1, thresh, asTable){
+		var result = [];
+	
+	if (asTable) {
+		temp1=[];
+		temp=[];
+		
+		Object.keys(data1).forEach(function(x){
+				//console.log(data1[x])
+			temp1.push(data1[x]);
+		});
+		
+		temp1.forEach(function(d,i){
+			temp.push([d.name]);
+		});
+		
+		result = temp;	
+
+	} else {		
+		
+		data1.forEach(function(val,id,arr) {
+			if (val['weight'] >= thresh)
+				//console.log(val['weight']);
+				result.push(val);
+		});
+	}
+	
+	return result;
+};
+
+//hover function for nearby visibility
+function highlightOn(data1,nodeid){
+	a = 0
+	var neighbors = [];
+	var tblData = [];
+	data1.forEach(function(d,i){	
+		d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke-opacity'].value = .2;
+		
+		if ((d.source.name == nodeid) || (d.target.name == nodeid)){
+			//console.log(d.source.name + "|" + d.Recipient + "|" + d.weight);
+			d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke-width'].value = 4;
+			d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke'].value = "red";
+			d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke-opacity'].value = 1;
+			
+			if (d.source.name == nodeid){
+				neighbors[a] = d.target.name
+				//tblData.push([d.source.name,d.target.name,d.N,d.Betweenness])
+			} else {
+				neighbors[a] = d.source.name
+				tblData.push([d.target.name,d.source.name,d.N,d.Betweenness])
+			}
+			
+			a = a + 1
+		};
+
+	});
+
+	console.log(tblData);
+	//adjust legend attributes
+	d3.select('#legend1').selectAll(".legend").selectAll("text").forEach(function(d){
+		if (neighbors.indexOf(d[0].attributes.id.value) != -1){
+			d[0].attributes.fill.value = "blue";
+			d[0].attributes.style.value= "font-size: 17px";
+		};
+	});	
+	
+	
+	//create supporting table
+	renderTable(tblData);
+}
+
+function dropdownChange(selection){
+	x = document.getElementById("dropdownRegion")
+	console.log(x.options[x.selectedIndex].text);
+}
+
+function highlightOff(data1){
+	data1.forEach(function(d,i){	
+		d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke-opacity'].value = .6;
+		d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke-width'].value = 2;
+		d3.select('#network1').selectAll('.link').selectAll(".line")[i].parentNode.attributes['stroke'].value = "black";
+	});
+	
+	d3.select('#legend1').selectAll(".legend").selectAll("text").forEach(function(d){
+			d[0].attributes.fill.value = "black";
+			d[0].attributes.style.value= "font-size: 15px";
+	});
+	
+}
+
+function renderTable(data){
+	
+	d3.select("table").remove();
+	
+	var table = d3.select("#table1").append("table")
+					.attr("width",200);
+	
+	var tablebody = table.append("tbody");
+	
+	//column names are hard-coded
+	var tablehead = table.append("thead").append("tr")
+					.selectAll("th")
+					.data(["Department","Connection","Strength","Betweenness"]).enter()
+					.append('th')
+					.text(function(d) { return d; });
+	
+	
+	var rows = tablebody.selectAll("tr")
+					.data(data)
+					.enter()
+					.append("tr");
+					
+	var cells = rows.selectAll("td")
+					.data(function(d){  return d; })
+					.enter().append("td")
+					.text(function(d) {return d; });
+	
+}
+
+
+createNetwork(mp2,filterNum);
+
+
+</script>
+
+
+
+</body>
+
+{% endblock %}

@@ -1,0 +1,599 @@
+{% extends "Visual/base.html" %}
+
+{%block content %}
+
+<style>
+
+div.margin1 {
+	height: 70px;
+}
+
+#menu1, #menu2, #menu3 select{
+	font-size: 1.2em;
+
+}
+
+#table1, th, td {
+	border: .5px solid black;
+}
+
+
+body {
+  background: #FFFFF;
+
+}
+
+#chart1 {
+	position: relative;
+}
+
+#chart2 {
+	position: relative;
+	display: inline-block;
+	float: right;
+}
+
+.row {
+display: table;
+table-layout: fixed;
+}
+
+.column {
+	display: table-cell;
+	border-spacing: 50px;
+}
+
+</style>
+
+<div class="margin1"> </div> 
+
+<div id="menu1" class="dropdown-content">Select Region:  </div>
+<div id="menu3" class="dropdown-content">Value Of:  </div>
+<div id="menu2" class="dropdown-content">As Of:  </div>
+
+
+<div class="row">
+	<div class="column"> <div id="chart1"></div></div>
+	<div class="column"> <div id="chart2"></div></div>
+</div>
+<div id="table1"></div>
+
+<!-- load the d3.js library -->	
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="//d3js.org/d3-scale-chromatic.v0.3.min.js"></script>
+
+<script type="text/javascript">
+
+	//data model import
+	var data = JSON.parse('{{ datarow|safe }}');
+	console.log(data)
+	console.log(data.fields)
+	var mp = data.map(a => a.fields);
+
+	ynames = {"Transfers": "Headcount_XFRs_TTM", "Promotions": "Headcount_XFR_Promotion_TTM", 
+				"Lateral": "Headcount_XFR_Lateral_TTM", "Demotions": "Headcount_XFR_Lateral_TTM",
+				"Turnover": "TurnoverPct_TTM", "Headcount": "Headcount_Demographic_Full"};
+				
+	ynamesinv = {"Headcount_XFRs_TTM": "Transfers", "Headcount_XFR_Promotion_TTM": "Promotions", 
+				"Headcount_XFR_Lateral_TTM": "Lateral", "Headcount_XFR_Lateral_TTM": "Demotions",
+				"TurnoverPct_TTM": "Turnover", "Headcount_Demographic_Full": "Headcount"};
+
+		
+	var yval = "Headcount_Demographic_Full"; //default x-axis for primary chart (menu3)
+	
+	
+	//create unique list
+	function uniqueItems(data,field){
+		ui = Array.from(new Set(
+				data.map(a => a[field])
+			));
+		 if (field == "ReportDate") { return ui; 
+		 } else {
+		return ["Select " + field].concat(ui);
+		}
+	};
+	
+	//create selection dropdown
+	const dropdownMenu = (selection,props,field) => {
+		const { options } = props;
+	
+		let select = selection.selectAll('select').data([null]);
+		select = select.enter().append('select').merge(select)
+				.attr('id','dropdown'+ field);
+		
+		const option = select.selectAll('option').data(options);
+			option.enter().append('option').merge(option)
+				.attr('value',d=> d)
+				.text(d => d);
+	};
+		
+	var i_lvl;
+	
+	//add to body
+	dropdownMenu(d3.select('#menu1'), {options: uniqueItems(mp,"Region")}, "Region");
+	dropdownMenu(d3.select('#menu2'), {options: uniqueItems(mp,"ReportDate")}, "ReportDate");	
+	dropdownMenu(d3.select('#menu3'), {options: ["Headcount","Turnover","Transfers","Promotions","Lateral","Demotions"] }, "YAxis");
+
+	//format percentages
+	var formatPct = d3.format(",.2%");
+	
+//format table
+function renderTable(data){
+	
+	//instead of ycol, use column 3	
+	
+	d3.select("table").remove();
+	
+	var table = d3.select("#table1").append("table");
+	var colorScale = d3.scaleSequential(d3.interpolateCool).domain(d3.extent(data,function(d) { return d[3]; }));
+	
+	var tablebody = table.append("tbody");
+	
+	//column names are hard-coded
+	var tablehead = table.append("thead").append("tr")
+					.selectAll("th")
+					.data(["Report Date","Region","BusinessUnit","Headcount","Turnover","Lateral","Promotion","Demotion"]).enter()
+					.append('th')
+					.text(function(d) { return d; })
+					.on("mouseover",function(d){
+						if (i_lvl > 0){
+							table.select("thead").style("background-color","red");
+						}
+					})
+					.on("mouseout",function(d){
+						table.select("thead").style("background-color","white");
+					})
+					.on("dblclick", function(d){ 
+						//restore to BU-view
+						i_lvl = i_lvl - 1
+						reapply_Graphs()
+					});
+					
+	var rows = tablebody.selectAll("tr")
+					.data(data)
+					.enter()
+					.append("tr")
+					.attr("fill","white")
+					.style("background-color","white")
+					.on("mouseover",function(d,i){
+						if (i_lvl<2){
+							d3.select(this).style("background-color", "lightblue");
+							if (yval!="TurnoverPct_TTM"){d3.select("#chart1").selectAll("rect")._groups[0][i].attributes.style.value = "fill: rgb(0,0,0)"};
+						}	
+					})
+					.on("mouseout",function(d,i){
+						d3.select(this).style("background-color","transparent");
+						if (yval!="TurnoverPct_TTM"){d3.select("#chart1").selectAll("rect")._groups[0][i].attributes.style.value = "fill: " + colorScale(d[3])};
+					})
+					.on("click",function(d){
+						//convert to report date view
+						if (i_lvl == 0) {
+							yy = document.getElementById("dropdownRegion");
+							yy.options[yy.selectedIndex].value = d[0];
+							}
+						if (i_lvl <2){ i_lvl = i_lvl+1  
+							filterval[3] = d[1];	
+							
+							filterval[i_lvl+1] = d[i_lvl]
+							filterval[i_lvl] = d[i_lvl-1]
+							
+							reapply_Graphs()
+						}
+					});
+					
+	var cells = rows.selectAll("td")
+					.data(function(d){ console.log(d); return d; })
+					.enter().append("td")
+					.text(function(d) { return d; });
+				
+}
+	
+	
+function renderChart(data,xcol,ycol,ycol2) {
+		
+		d3.select("svg").remove();
+		
+		var margin = {top: 40, right: 20, bottom: 30, left: 40},
+			width = 800 - margin.left - margin.right,
+			height = 500 - margin.top - margin.bottom;
+
+		// set the ranges
+		var x = d3.scaleBand()
+				  .range([0, width])
+				  .padding(0.1);
+		var y = d3.scaleLinear()
+				  .range([height, 0]);
+		
+		var y2 = d3.scaleLinear()
+				  .range([height,0]);
+	
+
+		var colorScale = d3.scaleSequential(d3.interpolateCool).domain(d3.extent(data,function(d) { return d[ycol]; }));	
+		//var colorScale = d3.scaleSequential(d3.interpolateMagma).domain(d3.extent(data,function(d) { return d[ycol]*2; }));
+		
+		// append the svg object to the body of the page
+		// append a 'group' element to 'svg'
+		// moves the 'group' element to the top left margin
+		
+		
+		var svg = d3.select("#chart1").append("svg")
+			.attr("width", width + margin.left + margin.right)
+			.attr("height", height + margin.top + margin.bottom)
+			.append("g")
+			.attr("transform","translate(" + margin.left + "," + margin.top + ")");
+
+			
+		  // format the data
+		  data.forEach(function(d) {
+			d.TurnoverPct_TTM = +d.TurnoverPct_TTM;
+		  });
+
+		  // Scale the range of the data in the domains
+		  x.domain(data.map(function(d) { return d[xcol]; }));
+			mina = d3.max([0,d3.min(data,function(d) { return d[ycol]; }) - d3.deviation(data,function(d) { return d[ycol]; })]); //causes errors
+		  y.domain([mina, d3.max(data, function(d) { return d[ycol]; })]);
+		  //y.domain(d3.extent(data,function(d) { return d[ycol]; }));
+		  //y2.domain([0, d3.max(data, function(d) { return d[ycol2]; })]);
+
+
+		if (yval != "TurnoverPct_TTM"){
+		  // append the rectangles for the bar chart
+		 
+			svg.selectAll("rect")
+			  .data(data)
+			  .enter().append("rect")
+			  .attr("class", "bar")
+			  .attr("x", function(d) { return x(d[xcol]); })
+			  .style("fill", function(d) { return colorScale(d[ycol]) })
+			  .attr("width", x.bandwidth())
+			  .attr("y", function(d) { return y(mina); })
+			  .attr("height", function(d) { return height - y(mina); })
+			  .on("mouseover", function(d,i) {
+					if (i_lvl < 2){
+						d3.select(this).style("fill", "black");
+						d3.select("#table1").selectAll("tr")._groups[0][i].style.backgroundColor = "lightblue";
+					}
+				})
+			  .on("mouseout", function(d,i) {
+					d3.select(this).style("fill", colorScale(d[ycol]));
+					d3.select("#table1").selectAll("tr")._groups[0][i].style.backgroundColor = "white";
+					
+				})
+			  .on("click",function(d){
+					console.log(i_lvl);
+						if (i_lvl < 2){
+							i_lvl = i_lvl + 1
+							filterval[i_lvl] = d[lfilter[i_lvl]]
+							filterval[i_lvl+1] = d[lfilter[i_lvl+1]]
+							reapply_Graphs()
+						}
+					
+				});
+			 
+			 //transition - bars	
+			svg.selectAll("rect")
+				.transition()
+				.duration(400)
+				.attr("y",function(d) { return y(d[ycol]); })
+				.attr("height",function(d) { return height - y(d[ycol]); })
+				.delay(function(d,i){ return(i*50)});
+				
+			//labels
+			svg.append("g").selectAll("text")
+				.data(data)
+				.enter().append("text")
+				.attr("dy","1.3em")
+				.attr("text-anchor","start")
+				.attr("fill-opacity",0) //start blank
+				.attr("x",function(d) { return x(d[xcol]) + x.bandwidth() / 3 ; })
+				.attr("y", function(d) { return y(d[ycol]) - 50; })
+				.text(function(d) { return d[ycol]; });
+	
+			//transition - text
+			svg.selectAll("text")
+				.transition()
+				.duration(500)
+				.attr("fill-opacity",1)
+				.attr("y", function(d) { return y(d[ycol]) - 20; })
+				.delay(function(d,i) { return (i*50+200)});
+	
+		} else {	
+		
+			//line chart function
+			var line = d3.line()
+				  .x(function(d) { return x(d[xcol]) + x.bandwidth() / 2; })
+				  .y(function(d) { 	return y(d[ycol]); });
+				 // .curve(d3.curveMonotoneX);
+				  
+			
+			//second (line) data
+			svg.append("path")
+				.attr("class","line")
+				.attr("fill","none")
+				.attr("stroke-width",2.5)
+				.attr("stroke","white")
+				.attr("d",line(data));
+			
+			//transition - line
+			svg.selectAll("path")
+				.transition()
+				.duration(400)
+				.attr("stroke","darkgreen")
+				.delay(function(d,i){ return(100)});
+			
+			//2nd labels
+			svg.append("g").selectAll("text")
+				.data(data)
+				.enter().append("text")
+				.attr("fill-opacity",0)
+				.attr("dy","1.3em")
+				.attr("x",function(d) { return x(d[xcol]) + x.bandwidth() / 2; })
+				.attr("y", function(d) { return y(d[ycol]) - 50 ; })
+				.text(function(d) { return formatPct(d[ycol]); });
+
+			//transition - text
+			svg.selectAll("text")
+				.transition()
+				.duration(500)
+				.attr("fill-opacity",1)
+				.attr("x",function(d) { return x(d[xcol]) + x.bandwidth()/2+4 ; })
+				.attr("y", function(d) {return y(d[ycol])+10; })
+				.delay(function(d,i) { return (i*50+200)});
+				
+	
+		}//type of chart
+
+		  // add the x Axis
+		  svg.append("g")
+			  .attr("transform", "translate(0," + height + ")")
+			  .call(d3.axisBottom(x));
+
+
+		  // add the y Axis
+		  svg.append("g")
+			  .call(d3.axisLeft(y));
+
+
+		  // add title
+		 	svg.append("text")
+				.attr("x",width/2)
+				.attr("y",0 - (margin.top/2))
+				.attr("text-anchor","middle")
+				.style("font-size","24px")
+				.text("Graph Of " + ynamesinv[yval] + " by " + lfilter[i_lvl+1] + " (" + filterval[i_lvl+1]+ ")") ;
+				
+} //end function
+
+
+///////////////chart 2 - donut///////////////////
+function renderChart2(data){
+	
+	var dcolor = d3.scaleOrdinal(['#41afe5','#8f5cc5','#e15c5c']);
+	
+	d3.select("#donutChart1").remove()
+	
+	var lat = data[0].Headcount_XFR_Lateral_TTM,
+		promo = data[0].Headcount_XFR_Promotion_TTM,
+		demo = data[0].Headcount_XFR_Demotion_TTM
+	
+	var donutData = [{prev : 0, curr : lat, type: "Lateral"} ,
+					{prev : lat, curr : promo + lat, type: "Promotions"},
+					{prev : lat + promo, curr : demo + promo + lat, type: "Demotions"}];
+	
+	dsum = data[0].Headcount_XFR_Lateral_TTM + data[0].Headcount_XFR_Promotion_TTM + data[0].Headcount_XFR_Demotion_TTM;
+	var donut_x = d3.scaleLinear().domain([0,dsum])
+		.range([0, 2 * Math.PI]);
+		
+	var arc = d3.arc()
+		.startAngle(function(d) {  return donut_x(d.data.prev); })
+		.endAngle(function(d) { return donut_x(d.data.curr); })
+		.innerRadius(function(d) { return 60; })
+		.outerRadius(function(d) { return 100; });
+			
+	var margin = {top: 60, right: 20, bottom: 30, left: 40},
+		width = 400 - margin.left - margin.right,
+		height = 400 - margin.top - margin.bottom;
+			
+	
+	var svgDonut = d3.select("#chart2").append("svg")
+					.attr("id","donutChart1")
+					.attr("width", width)
+					.attr("height", height)
+					.append("g")
+					.attr("transform", "translate(" + width / 2 + "," + (height / 2) + ")");
+	
+	var pie = d3.pie()
+				.sort(null)
+				.value(function(d) { return d.curr });
+					
+	
+	var dg = svgDonut.selectAll(".arc")
+				.data(pie(donutData))
+				.enter().append("g")
+				.attr("transform","translate(50,50)")
+				.attr("class","arc")
+				.on("click",function(d){
+						change(d);
+				});
+		
+		//slices			
+		dg.append("path")
+				.attr("d",arc)
+				.style("fill",function(d) { return dcolor(d.data.curr) })
+				.on("mouseover", function(d){
+					d3.select(this).style("fill", "black");
+				})
+				.on("mouseout",function(d){
+					d3.select(this).style("fill", function(d) { return dcolor(d.data.curr) });
+				});
+				
+		dg.append("text")
+			.attr("transform",function(d) { return "translate(" + arc.centroid(d) + ")"; })
+			.attr("dy", ".3em")
+			.text(function(d) { return d.data.curr - d.data.prev });
+		
+
+		// add title
+			dg.append("text")
+				.attr("x",0)
+				.attr("y",-130)
+				.attr("text-anchor","middle")
+				.style("font-size","20px")
+				.text("Transfers");
+		
+		// add label		
+		var legend = svgDonut.selectAll('.legend')
+				.data(["Lateral","Promo","Demo"])
+				.enter().append("g")
+				.attr("class","legend")
+				.attr("transform",function(d,i){
+					var horiz = 30
+					var vert = i*15 + 20
+					return 'translate(' + horiz + "," + vert + ")";
+				})
+				
+		legend.append('rect')
+			.attr("width",10)
+			.attr("height",10)
+			.style("fill",dcolor)
+			.style("stroke",dcolor);
+			
+		legend.append('text')
+			.attr('x',15)
+			.attr('y',10)
+			.text(function(d) { return d;});
+		
+	//subfunction of chart 2 (donut chart)
+	function change(d){  
+		yval = ynames[d.data['type']];
+		datachange();
+	 }
+	
+} // end render chart2
+///////////////chart 2 ///////////////////
+
+function reapply_Graphs(){
+	renderChart(filterJSON(mp,i_lvl,false),xfields[i_lvl+1],yval,"TurnoverPct_TTM");
+	renderTable(filterJSON(mp,i_lvl,true));
+	renderChart2(filterTop(mp,i_lvl));
+}
+
+//filtering function
+function filterJSON(jdata, lvl, asTable){
+		var result = [];
+		
+		//console.log(lvl);
+		//console.log(levels[lvl+1] + " - category value");
+		//console.log(xfields[lvl] + " - first filter (x field)");
+		
+		//console.log(filterval[lvl + 1] + " - first filter val");		
+		//console.log(lfilter[lvl] + " - second filter");
+		//console.log(filterval[lvl] + " - second filter val");
+		result = [];
+				
+		Value1 = filterval[lvl + 1];
+		Value2 = filterval[lvl];
+		
+		jdata.forEach(function(val,id,arr) {
+			if (val['Category'] == levels[lvl+1]){
+				if (val[xfields[lvl]] == Value1){
+					if (val[lfilter[lvl]] == Value2)
+						result.push(val);
+				}
+			}
+		});
+		
+		if (asTable) {
+		temp=[]	;
+			result.forEach(function(d,i){
+				temp.push([d.ReportDate, d.Region, d.BU_SL, d.Headcount_Demographic_Full, formatPct(d.TurnoverPct_TTM), d.Headcount_XFR_Lateral_TTM, d.Headcount_XFR_Promotion_TTM, d.Headcount_XFR_Demotion_TTM]);
+			});
+		result = temp;	
+		}
+
+	return result;
+	};
+
+function filterTop(jdata,lvl){
+		result = [];
+		Value1 = filterval[lvl + 1];
+		Value2 = filterval[lvl];
+		
+		jdata.forEach(function(val,id,arr) {
+			if (val['Category'] == levels[lvl]){
+				if (val[xfields[lvl]] == Value1){
+					if (val[lfilter[lvl]] == Value2)
+						result.push(val);
+				}
+			}
+		});
+	return(result);
+}
+
+								//0 = "Region"; "Report Date", reportdate; "ReportDate", reportdate
+								//1 = "BU/SL";	"Region", 	region;		 "ReportDate", reportdate
+								//2 = "BU/SL";	"BU_SL",	 bu or sl;	 "Region", region
+	var levels = ['System-Wide','Region','BU/SL','BU/SL'] //filter
+	var xfields = ['ReportDate','Region','BU_SL','ReportDate'] //expand by
+	var lfilter = ['ReportDate','ReportDate','Region','BU_SL']  //field to filter on
+	
+
+//function to change data based on filters
+function datachange(){	
+								
+	filtereddata = filterJSON(mp,i_lvl,false);
+	tabledata = filterJSON(mp,i_lvl,true);
+	Topfiltereddata = filterTop(mp,i_lvl);
+	
+	///////////////////////
+	//run bar chart function, using mapped data
+	renderChart(filtereddata,xfields[i_lvl+1],yval,"TurnoverPct_TTM");
+
+	//run table, using mapped/pushed array
+	renderTable(tabledata);	
+
+	//run donut chart function,
+	renderChart2(Topfiltereddata);
+
+};
+
+////application of functions - on startup
+	var filterval = []
+	filt1 = document.getElementById("dropdownReportDate");
+	filt2 = document.getElementById("dropdownRegion");
+	filterval[0] = filt1.options[filt1.selectedIndex].text; //Report date
+	filterval[1] = filterval[0]; //also report date
+	filterval[2] = filt2.options[filt2.selectedIndex].text; //Region
+	filterval[3] = "" //reserved for BU
+
+	i_lvl = 0;
+	
+	
+////apply filter	
+d3.select("#menu2").on("change", function() {
+	filt1 = document.getElementById("dropdownReportDate");
+	filterval[0] = filt1.options[filt1.selectedIndex].text; //Report date
+	filterval[1] = filterval[0]; //also report date
+	datachange()});
+	
+d3.select("#menu1").on("change", function() {
+	filt2 = document.getElementById("dropdownRegion");
+	filterval[2] = filt2.options[filt2.selectedIndex].text; //Region
+	filterval[3] = "" //reserved for BU
+	if (filterval[2] == "Company-Wide"){ i_lvl = 0} else {i_lvl = 1}
+	datachange()});
+
+d3.select("#menu3").on("change", function() {
+	filt3 = document.getElementById("dropdownYAxis");
+	ytext = filt3.options[filt3.selectedIndex].text; //Variable
+	yval = ynames[ytext];
+
+	datachange()});
+
+//initial charts run
+datachange()
+
+
+</script>
+
+{% endblock %}
