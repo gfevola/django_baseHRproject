@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Minimal Django File Upload Example</title>   
+    </head>
+    <body>
+
+        <!-- Upload form. Note enctype attribute! -->
+	<form method="post" enctype="multipart/form-data">
+		{% csrf_token %}
+		<p> 
+			<label>Report Name</label>
+			<input type="text" name="reportname",maxlength="12">
+		</p>		
+		
+		<p> 
+			<label>Upload Demographic here</label>
+			<input type="file" name="Demofile">
+			<input type="submit" name = "Demo_submit" value="Upload Demographic Only"/>
+		</p>
+		
+		<p> 
+			<label>Upload Terminations here</label>
+			<input type="file" name="Termfile">
+			<input type="submit" name = "Term_submit" value="Upload Terminations Only"/>
+		</p>
+		
+		<p> 
+			<label>Upload Hires here</label>
+			<input type="file" name="Hirefile">
+			<input type="submit" name = "Hire_submit" value="Upload Hires Only"/>
+		</p>
+
+		<p> 
+			<label>Upload Transfers here</label>
+			<input type="file" name="XFRfile">
+			<input type="submit" name = "XFR_submit" value="Upload Transfers Only"/>
+		</p>
+		
+		<p> 
+			<label>Upload Business Unit/SL Mapping here</label>
+			<input type="file" name="BUSLfile">
+			<input type="submit" name = "BUSL_submit" value="Upload BU Mapping Only"/>
+		</p>		
+
+		<p> 
+			<label>Upload LOA/XFR Mapping here</label>
+			<input type="file" name="LOAfile">
+			<input type="submit" name = "LOA_submit" value="Upload LOA/XFR Mapping Only"/>
+		</p>		
+
+
+		<button type="submit", name = "SubmitAll">Upload All</button>
+	</form>
+	
+    </body>
+</html>
