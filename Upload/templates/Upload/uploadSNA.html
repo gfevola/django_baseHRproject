@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Django Process SNA Data</title>   
+    </head>
+    <body>
+
+        <!-- Upload form. Note enctype attribute! -->
+	<form method="post" enctype="multipart/form-data">
+		{% csrf_token %}
+		<p> 
+			<label>Model Name</label>
+			<input type="text" name="ModelName",maxlength="12">
+		</p>	
+		<p> 
+			<label>Select SNA File</label>
+			<input type="file" name="SNAfile">
+		</p>
+		
+		<label>Add SNA Data from R</label>
+
+		<button type="submit">Submit</button>
+	</form>
+	
+    </body>
+</html>

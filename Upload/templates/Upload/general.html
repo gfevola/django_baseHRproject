@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Django Process Data, Hardcoded date</title>   
+    </head>
+	
+	<style>
+	
+	.row {
+		padding: 50px;
+	
+	}
+	
+	</style>
+    <body>
+
+        <!-- Upload form. Note enctype attribute! -->
+	<div class="row">
+		<form method="post" enctype="multipart/form-data">
+			{% csrf_token %}
+			
+			<div class="row">
+				<p> 
+					<label>Demographic Report Name</label>
+					<input type="text" name="reportname",maxlength="12">
+				</p>	
+
+				<label>Create HROps Stats for this Report Date</label>
+	</div>
+	<div class="row">
+				</p>			
+					<label>Select Job Code Table</label>
+					<input type="file" name="jobcodeFile">
+				</p>	
+	</div>
+
+
+	<div class="row">
+				<p> 
+					<label>Home/Work Type</label>
+					<input type="text" name="addrType",maxlength="12">
+				<p>
+				
+				</p>			
+					<label>Select Address File</label>
+					<input type="file" name="addrFile">
+				</p>	
+	</div>
+			
+			<label>Upload</label>
+
+			<button type="submit">Process</button>
+		</form>
+	
+	
+	
+	</div>	
+	
+	
+	
+    </body>
+</html>
